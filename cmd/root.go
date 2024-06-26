@@ -56,18 +56,41 @@ func sendRequest(url string) ([]string, error) {
 			noHrefLinks++
 		}
 	})
-
 	if noHrefLinks != 0 {
 		fmt.Printf("Found %d no href links\n", noHrefLinks)
 	}
 	return links, nil
+
+}
+func sendConcurrentRequest(urls []string, c chan<- string) {
+	var MSG = "END_OF_URLS"
+
+	for _, url := range urls {
+		links, err := sendRequest(url)
+		if err != nil {
+			fmt.Println(err)
+		}
+		for _, link := range links {
+			c <- link
+		}
+	}
+	c <- MSG
 }
 
 var rootCmd = &cobra.Command{
 	Use:   "linker [url]",
 	Short: "scrape all links within a web page",
 	Long: `A longer description that spans multiple lines and likely contains
-			examples and usage of using your application. For example:.`,
+			examples and usage of using your application. For example:
+			
+			printing in terminal
+			linker https://www.digikala.com/
+			linker -s https://www.digikala.com/ https://emalls.ir/ https://torob.com/
+
+
+			writing into a file
+			linker url > path_to_file
+`,
 
 	Run: func(cmd *cobra.Command, args []string) {
 		if len(args) == 0 {
@@ -82,6 +105,24 @@ var rootCmd = &cobra.Command{
 		for _, i := range links {
 			fmt.Printf("%s\n", i)
 		}
+		multiPages, _ := cmd.Flags().GetBool("multiple")
+		if multiPages == true {
+			var numUrls = len(args)
+			var numLinks int = 0
+			c := make(chan string)
+			go sendConcurrentRequest(args, c)
+
+			//	Ranging over the channel for read the values
+			for link := range c {
+				if link == "END_OF_URLS" {
+					break
+				}
+				numLinks++
+				fmt.Println(link)
+			}
+			fmt.Printf("Found %d links within the provided urls", numLinks-numUrls)
+
+		}
 	},
 }
 
@@ -94,5 +135,5 @@ func Execute() {
 
 func init() {
 	rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
-
+	rootCmd.Flags().BoolP("multiple", "m", false, "scrape multiple pages concurrently")
 }
